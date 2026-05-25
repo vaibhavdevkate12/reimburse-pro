@@ -9,27 +9,11 @@ export async function getExpenses() {
   const expenses = db.prepare('SELECT * FROM expenses ORDER BY date DESC').all() as any[];
   
   const results = expenses.map(exp => {
-    const items = db.prepare('SELECT * FROM expense_items WHERE expense_id = ?').all(exp.id);
+    const items = db.prepare('SELECT * FROM expense_items WHERE expense_id = ?').all(String(exp.id));
     return { ...exp, items };
   });
-
-  const syncedReimbursements = db.prepare('SELECT * FROM reimbursements ORDER BY created_at DESC').all() as any[];
   
-  const syncedResults = syncedReimbursements.map(rem => ({
-    id: rem.id,
-    date: rem.created_at.split(' ')[0],
-    name: rem.employee_name,
-    department: rem.employee_id,
-    status: rem.status === 'PROCESSED' ? 'Pending' : rem.status, // Map to existing status colors
-    items: [{
-      category: 'Reimbursement',
-      amount: rem.amount,
-      description: rem.description,
-      proof_path: rem.local_file_path
-    }]
-  }));
-  
-  return [...results, ...syncedResults];
+  return results;
 }
 
 export async function submitExpense(formData: FormData) {
@@ -52,7 +36,7 @@ export async function submitExpense(formData: FormData) {
       .run(date, name, department, 'Pending');
     
     newId = info.lastInsertRowid;
-    const insertItem = db.prepare('INSERT INTO expense_items (expense_id, category, amount, description, proof_path) VALUES (?, ?, ?, ?, ?)');
+    const insertItem = db.prepare('INSERT INTO expense_items (expense_id, category, amount, description, proof_path, payment_method, reference_no) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     for (let i = 0; i < itemsMetadata.length; i++) {
       const item = itemsMetadata[i];
@@ -71,7 +55,7 @@ export async function submitExpense(formData: FormData) {
         proofPath = `/data/proofs/${fileName}`;
       }
       
-      insertItem.run(newId, item.category, item.amount, item.description, proofPath);
+      insertItem.run(String(newId), item.category, item.amount, item.description, proofPath, item.paymentMethod || null, item.referenceNo || null);
     }
   });
 
@@ -95,10 +79,7 @@ export async function submitExpense(formData: FormData) {
 }
 
 export async function updateExpenseStatus(id: string | number, status: string) {
-  const result = db.prepare('UPDATE expenses SET status = ? WHERE id = ?').run(status, id);
-  if (result.changes === 0) {
-    db.prepare('UPDATE reimbursements SET status = ? WHERE id = ?').run(status, id);
-  }
+  db.prepare('UPDATE expenses SET status = ? WHERE id = ?').run(status, id);
   revalidatePath('/');
   return { success: true };
 }

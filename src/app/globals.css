@@ -435,50 +435,54 @@ tr:hover td {
   .print-proof-page {
     display: block;
     width: 100%;
-    padding: 2.5rem;
+    padding: 1cm 1cm 0.5cm 1cm;
     background-color: white;
-    break-before: page;
-    page-break-before: always;
+    box-sizing: border-box;
   }
 
   .proof-header {
-    margin-bottom: 2rem;
+    margin-bottom: 0.75rem;
     border-bottom: 2px solid #1e3a8a;
-    padding-bottom: 1rem;
+    padding-bottom: 0.5rem;
   }
 
   .proof-header h3 {
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 700;
     color: #1e3a8a;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.2rem;
   }
 
   .proof-header p {
-    font-size: 12px;
+    font-size: 11px;
     color: #444;
   }
 
   .proof-content {
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    display: block;
     width: 100%;
+    overflow: hidden;
   }
 
   .proof-content img {
     max-width: 100%;
-    max-height: 800px;
-    object-fit: contain;
+    display: block;
+    margin: 0 auto;
   }
 
-  .pdf-placeholder {
-    padding: 3rem;
-    background-color: #f3f4f6;
-    border: 2px dashed #ccc;
-    text-align: center;
-    border-radius: 8px;
-    color: #666;
+  .pdf-render-container {
     width: 100%;
+  }
+
+  .pdf-page-wrapper {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .pdf-render-container img {
+    max-width: 100% !important;
+    height: auto !important;
+    display: block;
+    margin: 0 auto;
   }
 }

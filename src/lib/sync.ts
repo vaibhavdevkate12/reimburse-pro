@@ -19,16 +19,12 @@ function getFileIdFromUrl(url: string): string | null {
   return match ? match[1] : null;
 }
 
-async function downloadDriveFile(fileId: string, destPath: string) {
-  // 1. Get metadata to check mimeType and Name
-  const metadata = await drive.files.get({ fileId, fields: '*' });
-  console.log(`[Sync] FULL METADATA FOR ${fileId}:`, JSON.stringify(metadata.data, null, 2));
-  
-  const mimeType = metadata.data.mimeType || '';
-  const fileName = metadata.data.name || 'unknown';
+async function getDriveFileMetadata(fileId: string) {
+  const metadata = await drive.files.get({ fileId, fields: 'id, name, mimeType' });
+  return metadata.data;
+}
 
-  console.log(`[Sync] Drive File Check - Name: "${fileName}", Type: "${mimeType}"`);
-
+async function downloadDriveFile(fileId: string, mimeType: string, destPath: string) {
   let response;
   if (mimeType.startsWith('application/vnd.google-apps.')) {
     // It's a Google Doc/Sheet/etc. - must use export
@@ -52,6 +48,36 @@ async function downloadDriveFile(fileId: string, destPath: string) {
       .on('error', (err) => reject(err))
       .pipe(dest);
   });
+}
+
+function formatSheetDate(dateStr: string, timestampStr: string): string {
+  const source = dateStr || timestampStr || '';
+  if (!source) return new Date().toISOString().split('T')[0];
+
+  // Try to parse DD/MM/YYYY or YYYY-MM-DD
+  const datePart = source.split(' ')[0].trim();
+  if (datePart.includes('/')) {
+    const parts = datePart.split('/');
+    if (parts.length === 3) {
+      const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+      const month = parts[1].padStart(2, '0');
+      const day = parts[0].padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  } else if (datePart.includes('-')) {
+    const parts = datePart.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return datePart; // already YYYY-MM-DD
+      } else {
+        const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+        const month = parts[1].padStart(2, '0');
+        const day = parts[0].padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    }
+  }
+  return datePart || new Date().toISOString().split('T')[0];
 }
 
 export async function syncReimbursements() {
@@ -115,65 +141,116 @@ export async function syncReimbursements() {
       const employeeName = row[globalCols.name] || 'Unknown';
       const employeeId = row[globalCols.id] || 'no-id';
 
+      // Unique ID for row-level idempotency: hash of timestamp + employeeId
+      const rowSyncHash = crypto.createHash('md5')
+        .update(`${timestamp}-${employeeId}`)
+        .digest('hex');
+
+      const categoryVal = row[globalCols.purpose] || 'Reimbursement';
+
+      // Check if already exists in local DB
+      const existing = db.prepare('SELECT id FROM expenses WHERE sync_hash = ?').get(rowSyncHash) as { id: number } | undefined;
+      if (existing) {
+        db.prepare('UPDATE expense_items SET category = ? WHERE expense_id = ?').run(categoryVal, String(existing.id));
+        continue;
+      }
+
+      const itemsToInsert: { category: string; amount: number; description: string; localFilePath: string; paymentMethod: string; referenceNo: string }[] = [];
+
       // Process up to 3 items per row
       for (let itemIdx = 1; itemIdx <= 3; itemIdx++) {
         const amtCol = getCol(`Amount (Item ${itemIdx})`);
         const descCol = getCol(`Description (Item ${itemIdx})`);
         const receiptCol = getCol(`Upload Receipt (Item ${itemIdx})`);
-
-        console.log(`[Sync] Item ${itemIdx} looking at Column ${receiptCol}: "${row[receiptCol]}"`);
+        const paymentMethodCol = getCol(`Payment Method (Item ${itemIdx})`);
+        const referenceNoCol = getCol(`Reference No (Item ${itemIdx})`);
+        // Try alternate column name with leading dot (some sheets have '. Description')
+        const altDescCol = getCol(`. Description (Item ${itemIdx})`);
 
         if (amtCol === -1 || !row[amtCol]) continue;
 
         const amount = parseFloat(row[amtCol].toString().replace(/[^0-9.]/g, ''));
         if (isNaN(amount) || amount <= 0) continue;
 
-        const description = row[descCol] || row[globalCols.purpose] || 'Reimbursement';
+        const description = row[descCol] || row[altDescCol] || row[globalCols.purpose] || 'Reimbursement';
+        const paymentMethod = (paymentMethodCol !== -1 ? row[paymentMethodCol] : '') || '';
+        const referenceNo = (referenceNoCol !== -1 ? row[referenceNoCol] : '') || '';
         const receiptUrl = row[receiptCol] || '';
 
         console.log(`[Sync] Row ${rowIndex} Item ${itemIdx} Raw Receipt URL: "${receiptUrl}"`);
-
-        // Unique ID for idempotency: hash of timestamp + employeeId + item index
-        const syncHash = crypto.createHash('md5')
-          .update(`${timestamp}-${employeeId}-item${itemIdx}`)
-          .digest('hex');
-
-        // Check if already exists in local DB
-        const existing = db.prepare('SELECT id FROM reimbursements WHERE sync_hash = ?').get(syncHash);
-        if (existing) continue;
 
         let localFilePath = '';
         const fileId = getFileIdFromUrl(receiptUrl);
 
         if (fileId) {
           try {
+            const metadata = await getDriveFileMetadata(fileId);
+            const mimeType = metadata.mimeType || '';
+            
+            let extension = '.jpg'; // default
+            if (mimeType === 'application/pdf' || mimeType.startsWith('application/vnd.google-apps.')) {
+              extension = '.pdf';
+            } else if (mimeType === 'image/png') {
+              extension = '.png';
+            } else if (mimeType === 'image/webp') {
+              extension = '.webp';
+            }
+
             const safeTimestamp = timestamp.replace(/[:/ ]/g, '_') || Date.now().toString();
-            const fileName = `${employeeId}_item${itemIdx}_${safeTimestamp}.jpg`;
+            const fileName = `${employeeId}_item${itemIdx}_${safeTimestamp}${extension}`;
             localFilePath = `/receipts/${fileName}`;
             const fullPath = path.join(RECEIPTS_DIR, fileName);
             
-            console.log(`[Sync] Attempting download for File ID: ${fileId}`);
-            await downloadDriveFile(fileId, fullPath);
+            console.log(`[Sync] Attempting download for File ID: ${fileId} (Mime: ${mimeType})`);
+            await downloadDriveFile(fileId, mimeType, fullPath);
             console.log(`[Sync] Successfully saved: ${localFilePath}`);
-          } catch (err: any) {
-            console.error(`[Sync] Failed download for Row ${rowIndex} Item ${itemIdx}:`, err.message);
+          } catch (err: unknown) {
+            console.error(`[Sync] Failed download for Row ${rowIndex} Item ${itemIdx}:`, err instanceof Error ? err.message : String(err));
           }
         } else if (receiptUrl) {
           console.warn(`[Sync] Could not extract File ID from URL: ${receiptUrl}`);
         }
 
-        try {
-          // Insert into SQLite (ID is auto-incremented starting from 1000)
-          db.prepare(`
-            INSERT INTO reimbursements (sync_hash, employee_name, employee_id, amount, description, receipt_url, local_file_path, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(syncHash, employeeName, employeeId, amount, description, receiptUrl, localFilePath, 'PROCESSED');
+        itemsToInsert.push({
+          category: categoryVal,
+          amount,
+          description,
+          localFilePath,
+          paymentMethod,
+          referenceNo
+        });
+      }
 
+      // If there are valid items, insert them together in a transaction
+      if (itemsToInsert.length > 0) {
+        try {
+          const dateVal = formatSheetDate(row[globalCols.dateOfPayment], timestamp);
+
+          const transaction = db.transaction(() => {
+            const info = db.prepare(`
+              INSERT INTO expenses (date, name, department, status, sync_hash)
+              VALUES (?, ?, ?, ?, ?)
+            `).run(dateVal, employeeName, employeeId, 'Pending', rowSyncHash);
+
+            const expenseId = info.lastInsertRowid;
+
+            const insertItem = db.prepare(`
+              INSERT INTO expense_items (expense_id, category, amount, description, proof_path, payment_method, reference_no)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `);
+
+            for (const item of itemsToInsert) {
+              insertItem.run(expenseId.toString(), item.category, item.amount, item.description, item.localFilePath, item.paymentMethod, item.referenceNo);
+            }
+          });
+
+          transaction();
           importedCount++;
-          console.log(`[Sync] Imported Item ${itemIdx} for ${employeeName} (Row ${rowIndex})`);
-        } catch (err: any) {
-          console.error(`[Sync] Database error for Row ${rowIndex} Item ${itemIdx}:`, err.message);
-          errors.push(`Row ${rowIndex} Item ${itemIdx}: ${err.message}`);
+          console.log(`[Sync] Imported ${itemsToInsert.length} items for ${employeeName} (Row ${rowIndex})`);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[Sync] Database error for Row ${rowIndex}:`, msg);
+          errors.push(`Row ${rowIndex}: ${msg}`);
         }
       }
     }
@@ -182,10 +259,11 @@ export async function syncReimbursements() {
     db.prepare('INSERT INTO sync_logs (records_imported, status) VALUES (?, ?)').run(importedCount, errors.length > 0 ? 'PARTIAL' : 'SUCCESS');
 
     return { importedCount, errors };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     console.error('Sync failed:', err);
     db.prepare('INSERT INTO sync_logs (records_imported, status, error_message) VALUES (?, ?, ?)')
-      .run(0, 'FAILED', err.message);
+      .run(0, 'FAILED', msg);
     throw err;
   }
 }

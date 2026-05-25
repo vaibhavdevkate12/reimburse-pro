@@ -2,6 +2,9 @@
 import { useState, useEffect } from "react";
 import { useCurrency } from "./CurrencyContext";
 import { getExpenses, updateExpenseStatus } from "./actions";
+import dynamic from "next/dynamic";
+
+const PDFRenderer = dynamic(() => import("./PDFRenderer"), { ssr: false });
 
 export default function HRDashboard() {
   const { symbol } = useCurrency();
@@ -249,7 +252,7 @@ export default function HRDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedExpense.items.map((item: any, i: number) => (
+                      {selectedExpense.items.map((item: { category: string; description: string; amount: number; proof_path?: string }, i: number) => (
                         <tr key={i}>
                           <td>{item.category}</td>
                           <td>{item.description}</td>
@@ -260,7 +263,7 @@ export default function HRDashboard() {
                                 <button 
                                   className="btn btn-secondary"
                                   style={{ padding: '0.2rem 0.5rem', fontSize: '0.7rem' }}
-                                  onClick={() => setPreviewUrl(item.proof_path)}
+                                  onClick={() => setPreviewUrl(item.proof_path || null)}
                                 >
                                   Preview
                                 </button>
@@ -296,7 +299,7 @@ export default function HRDashboard() {
               <div style={{ backgroundColor: '#f1f5f9', padding: '1.5rem', borderRadius: '0.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--secondary)" strokeWidth="1" style={{ marginBottom: '1rem' }}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                 <span style={{ color: 'var(--secondary)', textAlign: 'center', fontSize: '0.875rem' }}>
-                  {selectedExpense.items.filter((i: any) => i.proof_path).length} proof document(s) available for review.
+                  {selectedExpense.items.filter((i: { proof_path?: string }) => i.proof_path).length} proof document(s) available for review.
                 </span>
               </div>
             </div>
@@ -362,7 +365,7 @@ export default function HRDashboard() {
               </div>
               <div className="detail-item payment-for-row">
                 <span className="detail-label">Payment For</span>
-                <div className="detail-value">{selectedExpense.items.map((i: any) => i.category).join(', ')}</div>
+                <div className="detail-value">{Array.from(new Set(selectedExpense.items.map((i: { category: string }) => i.category))).join(', ')}</div>
               </div>
             </div>
 
@@ -377,11 +380,11 @@ export default function HRDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {selectedExpense.items.map((item: any, idx: number) => (
+                {selectedExpense.items.map((item: { description: string; amount: number; payment_method?: string; reference_no?: string }, idx: number) => (
                   <tr key={idx}>
                     <td>{idx + 1}</td>
-                    <td>Bank Transfer</td>
-                    <td>REF-{Math.floor(Math.random() * 10000)}</td>
+                    <td>{item.payment_method || '—'}</td>
+                    <td>{item.reference_no || '—'}</td>
                     <td>{item.description}</td>
                     <td style={{ textAlign: 'right' }}>{item.amount.toFixed(2)}</td>
                   </tr>
@@ -441,7 +444,7 @@ export default function HRDashboard() {
                 </div>
                 <div className="detail-item payment-for-row">
                   <span className="detail-label">Payment For</span>
-                  <div className="detail-value">{selectedExpense.items.map((i: any) => i.category).join(', ')}</div>
+                  <div className="detail-value">{Array.from(new Set(selectedExpense.items.map((i: { category: string }) => i.category))).join(', ')}</div>
                 </div>
               </div>
 
@@ -456,16 +459,16 @@ export default function HRDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedExpense.items.map((item: any, idx: number) => (
+                  {selectedExpense.items.map((item: { description: string; amount: number; payment_method?: string; reference_no?: string }, idx: number) => (
                     <tr key={idx}>
                       <td>{idx + 1}</td>
-                      <td>Bank Transfer</td>
-                      <td>REF-{Math.floor(Math.random() * 10000)}</td>
+                      <td>{item.payment_method || '—'}</td>
+                      <td>{item.reference_no || '—'}</td>
                       <td>{item.description}</td>
                       <td style={{ textAlign: 'right' }}>{item.amount.toFixed(2)}</td>
                     </tr>
                   ))}
-                  {[...Array(Math.max(0, 3 - selectedExpense.items.length))].map((_, i) => (
+                    {([...Array(Math.max(0, 3 - selectedExpense.items.length))] as unknown[]).map((_, i) => (
                     <tr key={`empty-${i}`} style={{ height: '3rem' }}>
                       <td></td>
                       <td></td>
@@ -489,7 +492,7 @@ export default function HRDashboard() {
           )}
 
           {/* PROOF DOCUMENTS (Each on its own page) */}
-          {selectedExpense.items.filter((item: any) => item.proof_path).map((item: any, idx: number) => (
+          {selectedExpense.items.filter((item: { proof_path?: string }) => item.proof_path).map((item: { category: string; amount: number; proof_path: string }, idx: number) => (
             <div key={`proof-${idx}`} className="print-proof-page">
               <div className="proof-header">
                 <h3>Proof for Item {idx + 1}: {item.category}</h3>
@@ -497,12 +500,9 @@ export default function HRDashboard() {
               </div>
               <div className="proof-content">
                 {item.proof_path.toLowerCase().endsWith('.pdf') ? (
-                  <div className="pdf-placeholder">
-                    PDF Document: {item.proof_path}
-                    <p>(PDFs should be reviewed digitally or printed separately if browser prevents iframe printing)</p>
-                  </div>
+                  <PDFRenderer url={item.proof_path} />
                 ) : (
-                  <img src={item.proof_path} alt={`Proof ${idx + 1}`} style={{ maxWidth: '100%', height: 'auto', border: '1px solid #ddd' }} />
+                  <img src={item.proof_path} alt={`Proof ${idx + 1}`} style={{ maxWidth: '100%', maxHeight: '19cm', width: 'auto', display: 'block', margin: '0 auto', border: '1px solid #ddd' }} />
                 )}
               </div>
             </div>

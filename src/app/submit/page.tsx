@@ -10,11 +10,11 @@ export default function SubmitExpense() {
   const [name, setName] = useState("");
   const [department, setDepartment] = useState("");
   const [items, setItems] = useState([
-    { category: "", amount: "", description: "", proof: null as File | null }
+    { category: "", amount: "", description: "", proof: null as File | null, paymentMethod: "", referenceNo: "" }
   ]);
 
   const handleAddItem = () => {
-    setItems([...items, { category: "", amount: "", description: "", proof: null }]);
+    setItems([...items, { category: "", amount: "", description: "", proof: null, paymentMethod: "", referenceNo: "" }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -51,7 +51,9 @@ export default function SubmitExpense() {
         return {
           category: item.category,
           amount: parseFloat(item.amount),
-          description: item.description
+          description: item.description,
+          paymentMethod: item.paymentMethod,
+          referenceNo: item.referenceNo
         };
       });
 
@@ -62,7 +64,7 @@ export default function SubmitExpense() {
       setSubmitted(true);
       setName("");
       setDepartment("");
-      setItems([{ category: "", amount: "", description: "", proof: null }]);
+      setItems([{ category: "", amount: "", description: "", proof: null, paymentMethod: "", referenceNo: "" }]);
       (e.target as HTMLFormElement).reset();
       
       setTimeout(() => {
@@ -154,15 +156,29 @@ export default function SubmitExpense() {
                       <input required type="number" step="0.01" min="0" className="form-input" placeholder="0.00" value={item.amount} onChange={(e) => handleItemChange(index, 'amount', e.target.value)} />
                     </div>
                   </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1rem' }}>
+                    <div>
+                      <label className="form-label">Payment Method</label>
+                      <select className="form-select" value={item.paymentMethod || ""} onChange={(e) => handleItemChange(index, 'paymentMethod', e.target.value)}>
+                        <option value="">Select Method (Optional)</option>
+                        <option value="UPI">UPI</option>
+                        <option value="Card">Card</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">Reference Number</label>
+                      <input type="text" className="form-input" placeholder="Transaction ID, Cheque No..." value={item.referenceNo || ""} onChange={(e) => handleItemChange(index, 'referenceNo', e.target.value)} />
+                    </div>
+                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', marginBottom: '1rem' }}>
                     <div>
                       <label className="form-label">Description / Business Purpose</label>
                       <textarea required className="form-textarea" rows={1} placeholder="Explain the purpose..." value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)}></textarea>
                     </div>
                     <div>
-                      <label className="form-label">Proof Document (Image/PDF)</label>
+                      <label className="form-label">Proof Document (Image/PDF) (Optional)</label>
                       <input 
-                        required 
                         type="file" 
                         accept="image/*,.pdf" 
                         className="form-input" 
