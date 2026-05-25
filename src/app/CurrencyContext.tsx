@@ -1,5 +1,5 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useSyncExternalStore, useCallback } from 'react';
 
 type Currency = 'USD' | 'INR';
 
@@ -15,27 +15,33 @@ const CurrencyContext = createContext<CurrencyContextType>({
   setCurrency: () => {},
 });
 
-export const CurrencyProvider = ({ children }: { children: React.ReactNode }) => {
-  const [currency, setCurrencyState] = useState<Currency>('INR');
-  const [mounted, setMounted] = useState(false);
+const subscribe = (listener: () => void) => {
+  window.addEventListener('storage', listener);
+  // Custom event for same-tab updates
+  window.addEventListener('erp_currency_changed', listener);
+  return () => {
+    window.removeEventListener('storage', listener);
+    window.removeEventListener('erp_currency_changed', listener);
+  };
+};
 
-  useEffect(() => {
-    setMounted(true);
-    const saved = localStorage.getItem('erp_currency') as Currency;
-    if (saved === 'INR' || saved === 'USD') {
-      setCurrencyState(saved);
-    }
+const getSnapshot = () => {
+  return localStorage.getItem('erp_currency') || 'INR';
+};
+
+const getServerSnapshot = () => 'INR';
+
+export const CurrencyProvider = ({ children }: { children: React.ReactNode }) => {
+  const currencyValue = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const currency: Currency = (currencyValue === 'USD') ? 'USD' : 'INR';
+
+  const setCurrency = useCallback((c: Currency) => {
+    localStorage.setItem('erp_currency', c);
+    // Dispatch event to trigger useSyncExternalStore update in the same tab
+    window.dispatchEvent(new Event('erp_currency_changed'));
   }, []);
 
-  const setCurrency = (c: Currency) => {
-    setCurrencyState(c);
-    localStorage.setItem('erp_currency', c);
-  };
-
   const symbol = currency === 'USD' ? '$' : '₹';
-
-  // Prevent hydration mismatch
-  if (!mounted) return <>{children}</>;
 
   return (
     <CurrencyContext.Provider value={{ currency, symbol, setCurrency }}>
