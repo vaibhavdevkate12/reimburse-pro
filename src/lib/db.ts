@@ -21,7 +21,8 @@ db.executeMultiple(`
     date TEXT NOT NULL,
     name TEXT NOT NULL,
     department TEXT NOT NULL,
-    status TEXT DEFAULT 'Pending'
+    status TEXT DEFAULT 'Pending',
+    receipt_no INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS expense_items (

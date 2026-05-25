@@ -146,7 +146,7 @@ export default function HRDashboard() {
           <table>
             <thead>
               <tr>
-                <th>ID</th>
+                <th>Receipt No.</th>
                 <th>Date</th>
                 <th>Employee</th>
                 <th>Items</th>
@@ -170,7 +170,7 @@ export default function HRDashboard() {
                 const totalAmount = calculateTotal(exp.items);
                 return (
                   <tr key={exp.id}>
-                    <td style={{ fontWeight: 500 }}>{exp.id}</td>
+                    <td style={{ fontWeight: 500 }}>{exp.receipt_no || exp.id}</td>
                     <td>{exp.date}</td>
                     <td>
                       <div style={{ fontWeight: 500 }}>{exp.name}</div>
@@ -326,7 +326,7 @@ export default function HRDashboard() {
                 <h2 className="voucher-title">Payment Voucher</h2>
                 <div className="receipt-no-box">
                   <span className="receipt-label">RECEIPT No.</span>
-                  <div className="receipt-value">{selectedExpense.id.toString()}</div>
+                  <div className="receipt-value">{selectedExpense.receipt_no?.toString() || selectedExpense.id.toString()}</div>
                 </div>
               </div>
             </div>
@@ -408,7 +408,7 @@ export default function HRDashboard() {
                   <h2 className="voucher-title">Payment Voucher</h2>
                   <div className="receipt-no-box">
                     <span className="receipt-label">RECEIPT No.</span>
-                    <div className="receipt-value">{selectedExpense.id.toString()} (Office)</div>
+                    <div className="receipt-value">{selectedExpense.receipt_no?.toString() || selectedExpense.id.toString()} (Office)</div>
                   </div>
                 </div>
               </div>

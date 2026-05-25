@@ -32,9 +32,13 @@ export async function submitExpense(formData: FormData) {
   const itemsMetadata = JSON.parse(itemJSON);
   const date = new Date().toISOString().split('T')[0];
   
+  const maxReceiptResult = await db.execute('SELECT MAX(receipt_no) as max_receipt FROM expenses');
+  const maxReceipt = maxReceiptResult.rows[0]?.max_receipt as number | null;
+  const receiptNo = maxReceipt && maxReceipt >= 3000 ? maxReceipt + 1 : 3000;
+  
   const info = await db.execute({
-    sql: 'INSERT INTO expenses (date, name, department, status) VALUES (?, ?, ?, ?) RETURNING id',
-    args: [date, name, department, 'Pending']
+    sql: 'INSERT INTO expenses (date, name, department, status, receipt_no) VALUES (?, ?, ?, ?, ?) RETURNING id',
+    args: [date, name, department, 'Pending', receiptNo]
   });
   
   const newId = info.rows[0].id;
