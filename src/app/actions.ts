@@ -39,9 +39,9 @@ export async function submitExpense(formData: FormData) {
     let proofPath = "";
     
     if (file && file.size > 0) {
-      // Use Vercel Blob storage to upload the file
+      // Use Vercel Blob storage to upload the file privately
       const blob = await put(`proofs/${newId}_${i}_${file.name}`, file, {
-        access: 'public',
+        access: 'private',
       });
       proofPath = blob.url;
     }
@@ -53,7 +53,7 @@ export async function submitExpense(formData: FormData) {
   }
 
   revalidatePath('/');
-  revalidatePath('/submit');
+  revalidatePath('/dashboard');
   return { success: true, id: newId?.toString() };
 }
 

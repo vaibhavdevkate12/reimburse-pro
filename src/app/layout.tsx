@@ -1,7 +1,6 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import { CurrencyProvider } from './CurrencyContext'
-import SidebarMenu from './SidebarMenu'
 
 export const metadata: Metadata = {
   title: 'ReimbursePro ERP',
@@ -18,7 +17,6 @@ export default function RootLayout({
       <body>
         <CurrencyProvider>
           <div className="layout">
-            <SidebarMenu />
             <main className="main-content">
               {children}
             </main>

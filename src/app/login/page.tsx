@@ -36,7 +36,7 @@ export default function Login() {
     try {
       const res = await verifyOtp(email, otp);
       if (res.success) {
-        window.location.href = "/";
+        window.location.href = "/dashboard";
       } else {
         setError(res.error || "Invalid OTP");
       }

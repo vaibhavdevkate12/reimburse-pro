@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-export function middleware(request: NextRequest) {
-  const isDashboard = request.nextUrl.pathname === '/'
+export function proxy(request: NextRequest) {
+  const isDashboard = request.nextUrl.pathname.startsWith('/dashboard')
   const isAuthenticated = request.cookies.has('auth_token')
 
   if (isDashboard && !isAuthenticated) {
@@ -11,5 +11,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/'],
+  matcher: ['/dashboard/:path*'],
 }
