@@ -21,7 +21,8 @@ db.executeMultiple(`
     date TEXT NOT NULL,
     name TEXT NOT NULL,
     department TEXT NOT NULL,
-    status TEXT DEFAULT 'Pending'
+    status TEXT DEFAULT 'Pending',
+    receipt_no INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS expense_items (
@@ -40,6 +41,11 @@ db.executeMultiple(`
     email TEXT UNIQUE NOT NULL,
     otp TEXT,
     otp_expires_at INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
   );
 `).catch(err => console.error("DB Init Error:", err));
 

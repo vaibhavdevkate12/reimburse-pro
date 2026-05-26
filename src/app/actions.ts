@@ -32,9 +32,31 @@ export async function submitExpense(formData: FormData) {
   const itemsMetadata = JSON.parse(itemJSON);
   const date = new Date().toISOString().split('T')[0];
   
+  const settingsResult = await db.execute({
+    sql: 'SELECT value FROM settings WHERE key = ?',
+    args: ['next_receipt_no']
+  });
+  let receiptNo = 3000;
+  if (settingsResult.rows.length > 0) {
+    receiptNo = parseInt(settingsResult.rows[0].value as string);
+    await db.execute({
+      sql: 'UPDATE settings SET value = ? WHERE key = ?',
+      args: [String(receiptNo + 1), 'next_receipt_no']
+    });
+  } else {
+    const maxReceiptResult = await db.execute('SELECT MAX(receipt_no) as max_receipt FROM expenses');
+    const maxReceipt = maxReceiptResult.rows[0]?.max_receipt as number | null;
+    receiptNo = maxReceipt && maxReceipt >= 3000 ? maxReceipt + 1 : 3000;
+    
+    await db.execute({
+      sql: 'INSERT INTO settings (key, value) VALUES (?, ?)',
+      args: ['next_receipt_no', String(receiptNo + 1)]
+    });
+  }
+  
   const info = await db.execute({
-    sql: 'INSERT INTO expenses (date, name, department, status) VALUES (?, ?, ?, ?) RETURNING id',
-    args: [date, name, department, 'Pending']
+    sql: 'INSERT INTO expenses (date, name, department, status, receipt_no) VALUES (?, ?, ?, ?, ?) RETURNING id',
+    args: [date, name, department, 'Pending', receiptNo]
   });
   
   const newId = info.rows[0].id;
@@ -69,5 +91,38 @@ export async function updateExpenseStatus(id: string | number, status: string) {
     args: [status, String(id)]
   });
   revalidatePath('/');
+  return { success: true };
+}
+
+export async function getReceiptCounter() {
+  const result = await db.execute({
+    sql: 'SELECT value FROM settings WHERE key = ?',
+    args: ['next_receipt_no']
+  });
+  if (result.rows.length > 0) {
+    return parseInt(result.rows[0].value as string);
+  }
+  const maxReceiptResult = await db.execute('SELECT MAX(receipt_no) as max_receipt FROM expenses');
+  const maxReceipt = maxReceiptResult.rows[0]?.max_receipt as number | null;
+  return maxReceipt && maxReceipt >= 3000 ? maxReceipt + 1 : 3000;
+}
+
+export async function updateReceiptCounter(newCount: number) {
+  const result = await db.execute({
+    sql: 'SELECT value FROM settings WHERE key = ?',
+    args: ['next_receipt_no']
+  });
+  if (result.rows.length > 0) {
+    await db.execute({
+      sql: 'UPDATE settings SET value = ? WHERE key = ?',
+      args: [String(newCount), 'next_receipt_no']
+    });
+  } else {
+    await db.execute({
+      sql: 'INSERT INTO settings (key, value) VALUES (?, ?)',
+      args: ['next_receipt_no', String(newCount)]
+    });
+  }
+  revalidatePath('/dashboard');
   return { success: true };
 }
