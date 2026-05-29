@@ -13,12 +13,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        // We must pass the Vercel Blob token to authorize downloading the private file
-        Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`
-      }
-    });
+    // For private Vercel Blob files, append the token as a query parameter
+    const blobUrl = new URL(url);
+    blobUrl.searchParams.set('token', process.env.BLOB_READ_WRITE_TOKEN || '');
+    
+    const response = await fetch(blobUrl.toString());
 
     if (!response.ok) {
       return new NextResponse("Failed to fetch file from Blob storage", { status: response.status });
